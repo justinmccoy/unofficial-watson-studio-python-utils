@@ -47,3 +47,14 @@ class WatsonStudioUtils:
 
     def get_cos_credentials(self):
         return self.cos_credentials
+    
+    def save_and_deploy_model(self, trained_model_guid, meta_data_props=None, name, description):
+        assert('Not implemented, contact justin.mccoy@us.ibm.com')
+
+    def save_model(self, trained_model_guid, meta_data_props=None):
+        # returns saved model guid
+        assert('Not implemented, contact justin.mccoy@us.ibm.com')
+
+    def deploy_model(self,model_id, name, description):
+        # details of created deployment as a dict
+        assert('Not implemented, contact justin.mccoy@us.ibm.com')

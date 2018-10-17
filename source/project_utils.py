@@ -6,35 +6,58 @@ import os.path
 class ProjectUtils:
 
     PROJECT_ID_KEY = "project_id"
-    FASHION_MIST_ROOT_KEY = "fashion_mnist_buckets"
-    FASHION_MIST_DATA_BUCKET_KEY = "data_bucket"
-    FASHION_MIST_RESULTS_BUCKET_KEY = "results_bucket"
+    DATA_BUCKET_KEY = "data_bucket"
+    RESULTS_BUCKET_KEY = "results_bucket"    
 
-    DATA_SET_FASHION_MNIST = "fashion_mnist"
-
-    def __init__(self, studio_utils):
-
+    def __init__(self, studio_utils, project_name):
         self.studio_utils = studio_utils
+        self.project_name = project_name.lower()
+        self.cos_utils = self.studio_utils.get_cos_utils()
 
-        self.data_bucket = None
-        self.results_bucket = None
-
-        self.settings_directory = os.path.join("..", "settings")
+        # Keep the settings independent for each project
+        self.settings_directory = os.path.join("./{}".format(project_name), "settings")
         os.makedirs(self.settings_directory, exist_ok=True)
 
         self.settings_file = os.path.join(self.settings_directory, "project.json")
         if os.path.exists(self.settings_file):
             with open(self.settings_file) as json_data:
                 self.settings = json.load(json_data)
+                print(self.settings)
+                if not self.PROJECT_ID_KEY in self.settings:
+                    self.settings[self.PROJECT_ID_KEY] = {}                
+
+                if self.project_name not in self.settings:
+                    self.settings[self.project_name] = {}
+
+                if self.DATA_BUCKET_KEY not in self.settings[self.project_name]:
+                    print("Creating data bucket")
+                    self.data_bucket = self.cos_utils.create_unique_bucket(self.project_name + '-data')
+                else:
+                    self.data_bucket = self.settings[self.project_name][self.DATA_BUCKET_KEY]
+                if self.RESULTS_BUCKET_KEY not in self.settings[self.project_name]:
+                    print("Creating results bucket")
+                    self.results_bucket = self.cos_utils.create_unique_bucket(self.project_name + '-results')
+                else:
+                    self.results_bucket = self.settings[self.project_name][self.RESULTS_BUCKET_KEY]
+
+                    
         else:
             print("No project settings found")
             self.settings = {}
+            self.settings[self.project_name] = {}
+            self.data_bucket = self.cos_utils.create_unique_bucket(self.project_name + '-data')
+            self.results_bucket = self.cos_utils.create_unique_bucket(self.project_name + '-results')
+
+        self.settings[self.project_name][ProjectUtils.DATA_BUCKET_KEY] = self.data_bucket
+        self.settings[self.project_name][ProjectUtils.RESULTS_BUCKET_KEY] = self.results_bucket
+
+        self.save_project_settings()
 
     def get_data_bucket(self):
-        return self.settings[ProjectUtils.FASHION_MIST_ROOT_KEY][ProjectUtils.FASHION_MIST_DATA_BUCKET_KEY]
+        return self.data_bucket
 
     def get_results_bucket(self):
-        return self.settings[ProjectUtils.FASHION_MIST_ROOT_KEY][ProjectUtils.FASHION_MIST_RESULTS_BUCKET_KEY]
+        return self.results_bucket
 
     def get_project_id(self):
         if ProjectUtils.PROJECT_ID_KEY in self.settings:
@@ -51,64 +74,21 @@ class ProjectUtils:
         self.settings[ProjectUtils.PROJECT_ID_KEY] = project_id
         self.save_project_settings()
 
-    def download_dataset(self, data_set_name):
+    def upload_training_data(self, url, train_datafile_name, save_directory=None):
+        # Provide a save directory to rather than delete local downloaded files
+        if not save_directory:
+            save_directory = os.path.join("./", "data")
 
-        # only support one dataset for now
-        if data_set_name is ProjectUtils.DATA_SET_FASHION_MNIST:
+        self.cos_utils.transfer_remote_file_to_bucket(url, 
+                                                 train_datafile_name, 
+                                                 self.data_bucket,
+                                                 save_directory=save_directory,
+                                                 redownload=False )
 
-            print('\nCreating data and results buckets in COS')
-            cos_utils = self.studio_utils.get_cos_utils()
-
-            all_buckets = cos_utils.get_all_buckets()
-            print(all_buckets)
-
-            self.data_bucket = cos_utils.create_unique_bucket("fashion-mnist-data")
-            self.results_bucket = cos_utils.create_unique_bucket("fashion-mnist-results")
-
-            print('\nTransferring Fashion MNIST data to COS')
-
-            train_data_file = "train-images-idx3-ubyte.gz"
-            train_labels_file = "train-labels-idx1-ubyte.gz"
-            test_data_file = "t10k-images-idx3-ubyte.gz"
-            test_labels_file = "t10k-labels-idx1-ubyte.gz"
-            train_data_url = "https://github.com/zalandoresearch/fashion-mnist/raw/master/data/fashion/train-images-idx3-ubyte.gz"
-            train_labels_url = "https://github.com/zalandoresearch/fashion-mnist/raw/master/data/fashion/train-labels-idx1-ubyte.gz"
-            test_data_url = "https://github.com/zalandoresearch/fashion-mnist/raw/master/data/fashion/t10k-images-idx3-ubyte.gz"
-            test_labels_url = "https://github.com/zalandoresearch/fashion-mnist/raw/master/data/fashion/t10k-labels-idx1-ubyte.gz"
-
-            # Provide a save directory to rather than delete local downloaded files
-            save_directory = os.path.join("data", "fashion_mnist")
-
-            cos_utils.transfer_remote_file_to_bucket(train_data_url,
-                                                     train_data_file,
-                                                     self.data_bucket,
-                                                     save_directory=save_directory,
-                                                     redownload=False)
-            cos_utils.transfer_remote_file_to_bucket(train_labels_url,
-                                                     train_labels_file,
-                                                     self.data_bucket,
-                                                     save_directory=save_directory,
-                                                     redownload=False)
-            cos_utils.transfer_remote_file_to_bucket(test_data_url,
-                                                     test_data_file,
-                                                     self.data_bucket,
-                                                     save_directory=save_directory,
-                                                     redownload=False)
-            cos_utils.transfer_remote_file_to_bucket(test_labels_url,
-                                                     test_labels_file,
-                                                     self.data_bucket,
-                                                     save_directory=save_directory,
-                                                     redownload=False)
-
-            print('\nFashion MNIST data uploaded to %s' % self.data_bucket)
-            print('Results directory created at %s' % self.results_bucket)
-
-            self.settings[ProjectUtils.FASHION_MIST_ROOT_KEY] = {}
-            self.settings[ProjectUtils.FASHION_MIST_ROOT_KEY][ProjectUtils.FASHION_MIST_DATA_BUCKET_KEY] = self.data_bucket
-            self.settings[ProjectUtils.FASHION_MIST_ROOT_KEY][ProjectUtils.FASHION_MIST_RESULTS_BUCKET_KEY] = self.results_bucket
-            self.save_project_settings()
+        print('\nData uploaded to %s' % self.data_bucket)
 
     def save_project_settings(self):
         with open(self.settings_file, 'w') as outfile:
             json.dump(self.settings, outfile)
             print('Project settings stored to %s' % self.settings_file)
+

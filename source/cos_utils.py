@@ -80,7 +80,7 @@ class CosUtils:
             else:
                 is_downloaded = True
 
-        if not is_downloaded:
+        if not is_downloaded and file_url:
             file_path, _ = urllib.request.urlretrieve(file_url, file_path)
             stat_info = os.stat(file_path)
             print('Downloaded', file_name, stat_info.st_size, 'bytes.')

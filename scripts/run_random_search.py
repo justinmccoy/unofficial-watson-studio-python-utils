@@ -42,7 +42,34 @@ def create_random_search():
 studio_utils = WatsonStudioUtils(region="us-south")
 studio_utils.configure_utilities_from_file()
 
-project_utils = ProjectUtils(studio_utils)
+project_utils = ProjectUtils(studio_utils, 'Fashion-MNIST-Random')
+
+
+print('\nTransferring Fashion MNIST data to COS')
+
+train_data_file = "train-images-idx3-ubyte.gz"
+train_labels_file = "train-labels-idx1-ubyte.gz"
+test_data_file = "t10k-images-idx3-ubyte.gz"
+test_labels_file = "t10k-labels-idx1-ubyte.gz"
+train_data_url = "https://github.com/zalandoresearch/fashion-mnist/raw/master/data/fashion/train-images-idx3-ubyte.gz"
+train_labels_url = "https://github.com/zalandoresearch/fashion-mnist/raw/master/data/fashion/train-labels-idx1-ubyte.gz"
+test_data_url = "https://github.com/zalandoresearch/fashion-mnist/raw/master/data/fashion/t10k-images-idx3-ubyte.gz"
+test_labels_url = "https://github.com/zalandoresearch/fashion-mnist/raw/master/data/fashion/t10k-labels-idx1-ubyte.gz"
+
+# Provide a save directory to rather than delete local downloaded files
+save_directory = os.path.join("data", "fashion_mnist")
+
+project_utils.upload_training_data(url=train_data_url,
+                                   train_datafile_name=train_data_file)
+
+project_utils.upload_training_data(url=train_labels_url,
+                                   train_datafile_name=train_labels_file)
+
+project_utils.upload_training_data(url=test_data_url,
+                                train_datafile_name=test_data_file)
+
+project_utils.upload_training_data(url=test_labels_url,
+                                   train_datafile_name=test_labels_file)
 
 isPyTorch = False  # else TensorFlow
 if isPyTorch:
@@ -55,7 +82,7 @@ else:
     experiment_zip = "dynamic_hyperparms_tf.zip"
 
 # Initialize our experiment
-gpu_type = "k80"
+gpu_type = "v100x2"
 experiment = Experiment( "Fashion MNIST-Custom Random-{}-{}".format(framework, gpu_type),
                          "Perform random grid search",
                          framework,
@@ -86,7 +113,7 @@ for index, run_params in enumerate(search):
 experiment.execute()
 
 # Print the current status of the Experiment.
-#experiment.print_experiment_summary()
+experiment.print_experiment_summary()
 
 # Now you'll want to continuously monitor your experiment.  To do that from the command line,
-# you should use the WML CLI: bx ml monitor training-runs TRAINING_RUN_ID
+# you should use the WML CLI: ibmcloud ml monitor training-runs TRAINING_RUN_ID
